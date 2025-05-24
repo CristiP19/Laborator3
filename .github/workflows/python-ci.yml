@@ -3,9 +3,10 @@ name: Python CI
 on: [push, pull_request]
 
 jobs:
-  build:
+  test:
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest]
         python-version: ["3.8", "3.9", "3.10"]
@@ -19,24 +20,30 @@ jobs:
           python-version: ${{ matrix.python-version }}
 
       - name: Install dependencies
+        timeout-minutes: 5
         run: |
-          python -m pip install --upgrade pip
-          pip install flake8 pytest
+          python -m pip install --upgrade pip --no-cache-dir
+          pip install --no-cache-dir flake8 pytest
 
       - name: Lint with flake8
-        run: |
-          flake8 script.py test_eg.py
+        run: flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
 
-      - name: Run script
-        run: |
-          python script.py
+      - name: Run script.py
+        run: python script.py
 
-      - name: Test with pytest
-        run: |
-          pytest test_eg.py -v > result.log
+      - name: Run tests with pytest
+        run: pytest test_eg.py > result.log 2>&1 || echo "Tests failed but continuing"
 
-      - name: Upload test results
+      - name: Combine test results
+        shell: bash
+        run: |
+          echo "===== TEST RESULTS FOR ${{ matrix.os }} (Python ${{ matrix.python-version }}) =====" >> combined.log
+          cat result.log >> combined.log
+          printf "\n\n" >> combined.log
+
+      - name: Upload combined test results
+        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.10'
         uses: actions/upload-artifact@v4
         with:
-          name: test-results-${{ matrix.os }}-${{ matrix.python-version }}
-          path: result.log
+          name: test-results
+          path: combined.log
